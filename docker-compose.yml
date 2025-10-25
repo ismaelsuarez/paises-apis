@@ -1,0 +1,8 @@
+services:
+  paises_api:
+    build: ./app
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data:rw
+    restart: unless-stopped
