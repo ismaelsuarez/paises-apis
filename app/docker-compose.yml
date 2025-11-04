@@ -24,8 +24,8 @@ services:
     ports:
       - "8010:8000"
     volumes:
-      - ./data/g2:/data:rw
-      - ./datasets/g2/paises.csv:/data/paises.csv:ro
+      - ./data/g2:/app/data
+      - ./datasets/g2/paises.csv:/app/paises.csv:ro
     depends_on:
       preprocess-g2:
         condition: service_completed_successfully
@@ -48,8 +48,8 @@ services:
     ports:
       - "8020:8000"
     volumes:
-      - ./data/g3:/data:rw
-      - ./datasets/g3/paises.csv:/data/paises.csv:ro
+      - ./data/g3:/app/data
+      - ./datasets/g3/paises.csv:/app/paises.csv:ro
     depends_on:
       preprocess-g3:
         condition: service_completed_successfully

@@ -4,21 +4,26 @@ from pydantic import BaseModel
 from typing import Optional, List
 from pathlib import Path
 import csv, json
+import os
 
 DATA_DIR = Path("/data")
 CSV_PATH = DATA_DIR / "paises.csv"
 JSON_PATH = DATA_DIR / "paises.json"
 
-app = FastAPI(title="Paises API", version="1.0.0")
+# Variables de entorno para personalizar el título de la API
+APP_NAME = os.getenv("APP_NAME", "Paises API")
+APP_DESCRIPTION = os.getenv("APP_DESCRIPTION", "API de países (UTN).")
 
+app = FastAPI(title=APP_NAME, description=APP_DESCRIPTION, version="1.0.0")
+
+# CORS abierto para que tu app consuma sin problemas
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["*"], allow_credentials=True,
+    allow_methods=["*"], allow_headers=["*"]
 )
 
+# --------- Modelos ----------
 class CountryIn(BaseModel):
     nombre: str
     poblacion: int
@@ -29,6 +34,7 @@ class CountryIn(BaseModel):
 class Country(CountryIn):
     id: int
 
+# --------- "DB" en memoria con persistencia JSON ----------
 db: list[dict] = []
 _next_id: int = 1
 
@@ -41,18 +47,34 @@ def _load():
     if JSON_PATH.exists():
         db = json.loads(JSON_PATH.read_text(encoding="utf-8"))
     elif CSV_PATH.exists():
+        # Lee CSV (soporta BOM) y lo pasa a JSON
         with CSV_PATH.open("r", encoding="utf-8-sig", newline="") as f:
             reader = csv.DictReader(f)
+            # Limpiar encabezados por si vienen con espacios/BOM
             reader.fieldnames = [h.strip().lstrip("\ufeff") for h in reader.fieldnames]
             db = []
             for row in reader:
+                # Manejo tolerante de columnas (compatible con esquema canónico y original)
+                def safe_int(key, default=0):
+                    val = row.get(key, default)
+                    if val is None or val == "":
+                        return default
+                    try:
+                        return int(float(str(val).replace(".", "").replace(",", ".")))
+                    except:
+                        return default
+                
+                def safe_str(key, default=""):
+                    val = row.get(key, default)
+                    return str(val).strip() if val else default
+                
                 db.append({
                     "id": len(db) + 1,
-                    "nombre": row["nombre"].strip(),
-                    "poblacion": int(float(row["poblacion"])),
-                    "superficie": int(float(row["superficie"])),
-                    "continente": row["continente"].strip(),
-                    "flag_emoji": row.get("flag_emoji", "").strip()
+                    "nombre": safe_str("nombre", ""),
+                    "poblacion": safe_int("poblacion", 0),
+                    "superficie": safe_int("superficie", 0),
+                    "continente": safe_str("continente", ""),
+                    "flag_emoji": safe_str("flag_emoji", "")
                 })
         _save()
     else:
@@ -67,6 +89,7 @@ def _find_index(cid: int) -> int:
             return i
     return -1
 
+# --------- Endpoints ----------
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -92,8 +115,7 @@ def list_countries(
 @app.get("/countries/{cid}", response_model=Country)
 def get_country(cid: int):
     i = _find_index(cid)
-    if i < 0:
-        raise HTTPException(404, "No encontrado")
+    if i < 0: raise HTTPException(404, "No encontrado")
     return db[i]
 
 @app.post("/countries", response_model=Country, status_code=201)
@@ -109,8 +131,7 @@ def create_country(payload: CountryIn):
 @app.put("/countries/{cid}", response_model=Country)
 def replace_country(cid: int, payload: CountryIn):
     i = _find_index(cid)
-    if i < 0:
-        raise HTTPException(404, "No encontrado")
+    if i < 0: raise HTTPException(404, "No encontrado")
     newc = payload.dict() | {"id": cid}
     db[i] = newc
     _save()
@@ -119,12 +140,10 @@ def replace_country(cid: int, payload: CountryIn):
 @app.patch("/countries/{cid}", response_model=Country)
 def update_country(cid: int, patch: dict):
     i = _find_index(cid)
-    if i < 0:
-        raise HTTPException(404, "No encontrado")
+    if i < 0: raise HTTPException(404, "No encontrado")
     allowed = {"nombre","poblacion","superficie","continente","flag_emoji"}
     for k in list(patch.keys()):
-        if k not in allowed:
-            patch.pop(k, None)
+        if k not in allowed: patch.pop(k, None)
     db[i] |= patch
     _save()
     return db[i]
@@ -132,14 +151,14 @@ def update_country(cid: int, patch: dict):
 @app.delete("/countries/{cid}", status_code=204)
 def delete_country(cid: int):
     i = _find_index(cid)
-    if i < 0:
-        raise HTTPException(404, "No encontrado")
+    if i < 0: raise HTTPException(404, "No encontrado")
     db.pop(i)
     _save()
     return
 
 @app.post("/admin/reload-from-csv")
 def reload_from_csv():
+    """Vuelve a cargar desde /data/paises.csv (reemplaza todo)."""
     if not CSV_PATH.exists():
         raise HTTPException(404, "No existe /data/paises.csv")
     JSON_PATH.unlink(missing_ok=True)
