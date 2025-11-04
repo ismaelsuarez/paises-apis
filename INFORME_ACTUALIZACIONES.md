@@ -255,22 +255,53 @@ test -f datasets/g2/raw.csv && echo "✅ datasets/g2/raw.csv existe" || echo "�
 test -f datasets/g3/raw.csv && echo "✅ datasets/g3/raw.csv existe" || echo "❌ FALTA"
 ```
 
-### Paso 4: Levantar los Servicios
+### Paso 4: Construir y Etiquetar la Imagen Local (IMPORTANTE)
+
+**⚠️ CRÍTICO:** Los servicios nuevos (`api-g2`, `api-g3`, `preprocess-g2`, `preprocess-g3`) usan la imagen `paises-apis:local`. Esta imagen NO existe en Docker Hub, por lo que debes construirla localmente primero.
 
 ```bash
-# Opción 1: Levantar todos los servicios
-docker compose up -d --build
+# Opción A: Si el servicio 8000 ya está corriendo, etiquetar su imagen existente
+docker tag $(docker ps --filter "publish=8000" --format '{{.Image}}') paises-apis:local
+
+# Opción B: Construir la imagen desde cero (si no existe el servicio 8000)
+docker build -t paises-apis:local ./app
+
+# Verificar que la imagen existe
+docker images | grep paises-apis
+
+# Deberías ver algo como:
+# paises-apis  local  <image-id>  <time>  <size>
+```
+
+**Nota:** Si usas `docker compose up -d --build` para el servicio `paises_api` primero, también puedes etiquetar esa imagen después:
+```bash
+# Construir y levantar el servicio 8000
+docker compose up -d --build paises_api
+
+# Etiquetar la imagen recién construida
+docker tag $(docker compose images paises_api -q) paises-apis:local
+```
+
+### Paso 5: Levantar los Servicios
+
+```bash
+# Opción 1: Levantar todos los servicios (requiere que paises-apis:local exista)
+docker compose up -d paises_api  # Primero el servicio original
+docker tag $(docker compose images paises_api -q) paises-apis:local  # Etiquetar
+docker compose up -d preprocess-g2 preprocess-g3  # Luego preprocesamiento
+docker compose up -d api-g2 api-g3  # Finalmente las APIs nuevas
 
 # Opción 2: Levantar solo los servicios nuevos (si el 8000 ya está corriendo)
-docker compose up -d --build preprocess-g2 preprocess-g3
-docker compose up -d --build api-g2 api-g3
+# Asegúrate de que paises-apis:local existe (ver Paso 4)
+docker compose up -d preprocess-g2 preprocess-g3
+docker compose up -d api-g2 api-g3
 
 # Ver logs de preprocesamiento
 docker compose logs preprocess-g2
 docker compose logs preprocess-g3
 ```
 
-### Paso 5: Verificar Estado de los Servicios
+### Paso 6: Verificar Estado de los Servicios
 
 ```bash
 # Ver estado de todos los contenedores
@@ -280,7 +311,7 @@ docker compose ps
 docker compose ps | grep -E "(paises_api|api-g2|api-g3)" | grep "Up"
 ```
 
-### Paso 6: Probar las APIs
+### Paso 7: Probar las APIs
 
 ```bash
 # Salud servicio original (8000)
@@ -297,7 +328,7 @@ curl -s "http://localhost:8010/countries?limit=3" | head -20
 curl -s "http://localhost:8020/countries?limit=3" | head -20
 ```
 
-### Paso 7: Acceder a Documentación Swagger
+### Paso 8: Acceder a Documentación Swagger
 
 ```bash
 # URLs de documentación interactiva:
@@ -423,11 +454,50 @@ ls -la datasets/g2/paises.csv
 ls -la datasets/g3/paises.csv
 ```
 
-### Error de normalización
+### Error de normalización (preprocess falla con exit 1)
+**Problema:** Los servicios `preprocess-g2` y `preprocess-g3` fallan al ejecutarse.
+
+**Diagnóstico:**
 ```bash
-# Ejecutar manualmente el script de normalización
-docker compose run --rm preprocess-g2
+# Ver los logs detallados del error
 docker compose logs preprocess-g2
+docker compose logs preprocess-g3
+
+# Verificar que los archivos necesarios existan
+ls -la datasets/g2/
+ls -la datasets/g3/
+
+# Deben existir:
+# - datasets/g2/raw.csv
+# - datasets/g2/columns.map.json
+# - datasets/g3/raw.csv
+# - datasets/g3/columns.map.json
+```
+
+**Soluciones comunes:**
+
+1. **Si faltan los archivos raw.csv:**
+```bash
+# Copiar los CSV originales a las carpetas correspondientes
+cp /ruta/a/autos.csv datasets/g2/raw.csv
+cp /ruta/a/Colegios.csv datasets/g3/raw.csv
+```
+
+2. **Si falta el script normalize_csv.py:**
+```bash
+# Verificar que existe
+ls -la scripts/normalize_csv.py
+
+# Si no existe, crearlo o copiarlo desde el repo
+```
+
+3. **Probar el script manualmente:**
+```bash
+# Ejecutar el contenedor de preprocesamiento manualmente para ver el error exacto
+docker compose run --rm preprocess-g2
+
+# O ejecutar directamente en el contenedor
+docker run --rm -v $(pwd)/scripts:/scripts:ro -v $(pwd)/datasets/g2:/work paises-apis:local python /scripts/normalize_csv.py /work/raw.csv /work/columns.map.json /work/paises.csv
 ```
 
 ### Puerto ya en uso
@@ -437,6 +507,53 @@ sudo netstat -tulpn | grep :8010
 sudo netstat -tulpn | grep :8020
 
 # Detener servicio conflictivo o cambiar puerto en docker-compose.yml
+```
+
+### Error: "pull access denied for paises-apis"
+**Problema:** Docker intenta descargar `paises-apis:local` desde Docker Hub, pero es una imagen local.
+
+**Solución Rápida (si ya tienes el servicio 8000 corriendo):**
+```bash
+# 1. Etiquetar la imagen existente del servicio 8000
+docker tag paises-apis-paises_api:latest paises-apis:local
+
+# 2. Verificar que existe
+docker images | grep paises-apis
+
+# 3. Ahora levantar los servicios nuevos
+docker compose up -d preprocess-g2 preprocess-g3
+docker compose up -d api-g2 api-g3
+```
+
+**Solución Alternativa (si no existe el servicio 8000):**
+```bash
+# 1. Primero corregir el nombre del archivo requirements.txt (si tiene typo)
+# En el servidor: mv app/requeriments.txt app/requirements.txt (si existe el typo)
+
+# 2. Construir la imagen localmente
+docker build -t paises-apis:local ./app
+
+# 3. Verificar que existe
+docker images | grep paises-apis
+
+# 4. Ahora intenta levantar los servicios nuevamente
+docker compose up -d preprocess-g2 preprocess-g3
+docker compose up -d api-g2 api-g3
+```
+
+### Error: "requirements.txt not found" al construir
+**Problema:** El Dockerfile busca `requirements.txt` pero el archivo puede tener un typo (`requeriments.txt`).
+
+**Solución:**
+```bash
+# Verificar qué archivo existe
+ls -la app/ | grep -i requirement
+
+# Si existe "requeriments.txt" (con typo), renombrarlo:
+mv app/requeriments.txt app/requirements.txt
+
+# O crear requirements.txt copiando el contenido:
+cp app/requeriments.txt app/requirements.txt
 ```
 
 ### Datos no se actualizan

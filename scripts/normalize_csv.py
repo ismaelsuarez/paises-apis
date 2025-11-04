@@ -20,7 +20,7 @@ def to_int(val: str) -> int:
     except:
         return 0
 
-m = json.loads(MAP.read_text(encoding="utf-8"))
+m = json.loads(MAP.read_text(encoding="utf-8-sig"))
 
 # Normaliza headers: lower + elimina espacios duplicados
 def norm(s): return sluggify(s).lower()
