@@ -6,7 +6,14 @@ from pathlib import Path
 import csv, json
 import os
 
-DATA_DIR = Path("/data")
+# Soporta tanto /data (servicio 8000) como /app/data (servicios 8010/8020)
+# Verifica en tiempo de ejecución qué path existe
+def get_data_dir():
+    if Path("/app/data").exists():
+        return Path("/app/data")
+    return Path("/data")
+
+DATA_DIR = get_data_dir()
 CSV_PATH = DATA_DIR / "paises.csv"
 JSON_PATH = DATA_DIR / "paises.json"
 
