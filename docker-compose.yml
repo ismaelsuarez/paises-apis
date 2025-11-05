@@ -7,17 +7,7 @@ services:
       - ./data:/data:rw   # persistencia (csv/json)
     restart: unless-stopped
 
-  # --- PREPROCESO G2: normaliza AUTOS (evitar pulls, reutiliza imagen local) ---
-  preprocess-g2:
-    image: paises-apis:local
-    entrypoint: ["python"]
-    command: ["/scripts/normalize_csv.py","/work/raw.csv","/work/columns.map.json","/work/paises.csv"]
-    volumes:
-      - ./scripts:/scripts:ro
-      - ./datasets/g2:/work
-    restart: "no"
-
-  # --- API G2 en 8010 ---
+  # --- API G2 en 8010 (autos) ---
   api-g2:
     image: paises-apis:local
     container_name: paises-api-g2
@@ -26,10 +16,7 @@ services:
       - "8010:8000"
     volumes:
       - ./data/g2:/app/data
-      - ./datasets/g2/paises.csv:/app/data/paises.csv:ro
-    depends_on:
-      preprocess-g2:
-        condition: service_completed_successfully
+      - ./datasets/g2/raw.csv:/app/data/autos.csv:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
@@ -41,17 +28,7 @@ services:
     # read_only: true
     # tmpfs: ["/tmp"]
 
-  # --- PREPROCESO G3: normaliza COLEGIOS ---
-  preprocess-g3:
-    image: paises-apis:local
-    entrypoint: ["python"]
-    command: ["/scripts/normalize_csv.py","/work/raw.csv","/work/columns.map.json","/work/paises.csv"]
-    volumes:
-      - ./scripts:/scripts:ro
-      - ./datasets/g3:/work
-    restart: "no"
-
-  # --- API G3 en 8020 ---
+  # --- API G3 en 8020 (colegios) ---
   api-g3:
     image: paises-apis:local
     container_name: paises-api-g3
@@ -60,10 +37,7 @@ services:
       - "8020:8000"
     volumes:
       - ./data/g3:/app/data
-      - ./datasets/g3/paises.csv:/app/data/paises.csv:ro
-    depends_on:
-      preprocess-g3:
-        condition: service_completed_successfully
+      - ./datasets/g3/raw.csv:/app/data/colegios.csv:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
