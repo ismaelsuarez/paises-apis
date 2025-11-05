@@ -1,0 +1,126 @@
+=========================================
+COMANDOS PARA ARREGLAR API COLEGIOS EN SERVIDOR LINUX
+=========================================
+
+PASO 1: Conectarse al servidor Linux
+-------------------------------------
+ssh usuario@149.50.150.15
+
+PASO 2: Ir al directorio del proyecto
+-------------------------------------
+cd ~/paises-apis
+
+PASO 3: Actualizar código desde git (si usas git)
+-------------------------------------
+git pull origin main
+
+Si no usas git, subir manualmente el archivo app/main.py actualizado
+
+PASO 4: Agregar CSV_TYPE=colegios al .env.g3
+-------------------------------------
+echo 'CSV_TYPE=colegios' >> .env.g3
+
+Verificar que se agregó:
+cat .env.g3
+
+Debe mostrar:
+TZ=America/Argentina/Mendoza
+APP_NAME=Colegios API (UTN - Grupo 3)
+APP_DESCRIPTION=Dataset normalizado de colegios
+CSV_TYPE=colegios
+
+PASO 5: Verificar que existe el archivo CSV
+-------------------------------------
+ls -la datasets/g3/raw.csv
+
+Si no existe, copiarlo desde donde esté:
+cp /ruta/al/archivo/Colegios.csv datasets/g3/raw.csv
+
+PASO 6: Reconstruir el servicio api-g3
+-------------------------------------
+docker compose stop api-g3
+docker compose build api-g3
+docker compose up -d api-g3
+
+PASO 7: Ver los logs para verificar
+-------------------------------------
+docker compose logs -f api-g3
+
+Presionar Ctrl+C para salir de los logs
+
+Buscar en los logs que diga algo como:
+- "CSV_TYPE=colegios"
+- "colegios.csv"
+- No debe mostrar "autos.csv" como el CSV detectado
+
+PASO 8: Verificar que funcione
+-------------------------------------
+# Health check
+curl http://localhost:8020/health
+
+# Endpoint de colegios (NO debe dar 404)
+curl http://localhost:8020/colegios
+
+# Si devuelve [] es normal (lista vacía), pero NO debe dar 404
+
+PASO 9: Si aún no funciona, forzar rebuild completo
+-------------------------------------
+docker compose down api-g3
+docker compose build --no-cache api-g3
+docker compose up -d api-g3
+
+PASO 10: Verificar dentro del contenedor
+-------------------------------------
+# Ver qué CSV está montado
+docker exec paises-api-g3 ls -la /app/data/
+
+# Debe mostrar colegios.csv
+
+# Ver variable de entorno
+docker exec paises-api-g3 env | grep CSV_TYPE
+
+# Debe mostrar: CSV_TYPE=colegios
+
+# Ver código del servidor
+docker exec paises-api-g3 cat /app/main.py | grep -A 5 "CSV_TYPE"
+
+# Debe mostrar código que verifica os.getenv("CSV_TYPE")
+
+=========================================
+SCRIPT AUTOMÁTICO (Alternativa)
+=========================================
+
+Si prefieres usar el script de diagnóstico:
+chmod +x diagnostico_colegios.sh
+./diagnostico_colegios.sh
+
+Este script verificará todo automáticamente y te dirá qué está mal.
+
+=========================================
+VERIFICACIÓN FINAL
+=========================================
+
+Después de aplicar los pasos, verificar:
+
+1. curl http://localhost:8020/health
+   → Debe responder OK
+
+2. curl http://localhost:8020/colegios
+   → NO debe dar 404
+   → Puede devolver [] si no hay datos, pero NO 404
+
+3. docker compose ps api-g3
+   → Debe mostrar "Up"
+
+4. docker exec paises-api-g3 env | grep CSV_TYPE
+   → Debe mostrar CSV_TYPE=colegios
+
+=========================================
+NOTAS IMPORTANTES
+=========================================
+
+- NO toques los servicios paises_api (8000) ni api-g2 (8010)
+- Solo modifica api-g3 (8020)
+- Si el endpoint devuelve [] (lista vacía), es normal si no hay datos
+- El problema es el 404, no la ausencia de datos
+

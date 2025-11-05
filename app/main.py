@@ -32,25 +32,29 @@ if env_csv_type in ["paises", "autos", "colegios"]:
 
 # Si no se definió por ENV, buscar automáticamente
 if CSV_TYPE is None:
-    # Si estamos en /data (servicio 8000), priorizar paises.csv
+    # Si estamos en /data (servicio 8000), SIEMPRE usar paises.csv
     if DATA_DIR == Path("/data"):
-        search_order = ["paises.csv", "autos.csv", "colegios.csv"]
+        # Servicio 8000: SIEMPRE usa paises.csv
+        CSV_PATH = DATA_DIR / "paises.csv"
+        CSV_TYPE = "paises"
     else:
-        # Si estamos en /app/data (servicios 8010/8020), priorizar autos/colegios
-        # PERO: si hay ambos, verificar cuál está montado específicamente
+        # Si estamos en /app/data (servicios 8010/8020)
+        # IMPORTANTE: Cada servicio debe tener CSV_TYPE en su .env
+        # Si no tiene CSV_TYPE, buscar en orden específico según qué archivo está montado
+        # Buscar el archivo que está montado específicamente (no residual)
         search_order = ["autos.csv", "colegios.csv", "paises.csv"]
-
-    for possible_file in search_order:
-        candidate = DATA_DIR / possible_file
-        if candidate.exists():
-            CSV_PATH = candidate
-            if "colegios" in possible_file.lower():
-                CSV_TYPE = "colegios"
-            elif "autos" in possible_file.lower():
-                CSV_TYPE = "autos"
-            elif "paises" in possible_file.lower():
-                CSV_TYPE = "paises"
-            break
+        
+        for possible_file in search_order:
+            candidate = DATA_DIR / possible_file
+            if candidate.exists():
+                CSV_PATH = candidate
+                if "colegios" in possible_file.lower():
+                    CSV_TYPE = "colegios"
+                elif "autos" in possible_file.lower():
+                    CSV_TYPE = "autos"
+                elif "paises" in possible_file.lower():
+                    CSV_TYPE = "paises"
+                break
 
 if CSV_PATH is None:
     # Default según el directorio
