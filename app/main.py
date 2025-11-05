@@ -20,24 +20,37 @@ DATA_DIR = get_data_dir()
 CSV_PATH = None
 CSV_TYPE = None  # "paises", "autos" o "colegios"
 
-# Si estamos en /data (servicio 8000), priorizar paises.csv
-if DATA_DIR == Path("/data"):
-    search_order = ["paises.csv", "autos.csv", "colegios.csv"]
-else:
-    # Si estamos en /app/data (servicios 8010/8020), priorizar autos/colegios
-    search_order = ["autos.csv", "colegios.csv", "paises.csv"]
+# Primero verificar si hay una variable de entorno que fuerza el tipo
+env_csv_type = os.getenv("CSV_TYPE", "").lower().strip()
+if env_csv_type in ["paises", "autos", "colegios"]:
+    CSV_TYPE = env_csv_type
+    CSV_PATH = DATA_DIR / f"{CSV_TYPE}.csv"
+    # Verificar que el archivo existe
+    if not CSV_PATH.exists():
+        CSV_PATH = None
+        CSV_TYPE = None  # Reset si no existe
 
-for possible_file in search_order:
-    candidate = DATA_DIR / possible_file
-    if candidate.exists():
-        CSV_PATH = candidate
-        if "colegios" in possible_file.lower():
-            CSV_TYPE = "colegios"
-        elif "autos" in possible_file.lower():
-            CSV_TYPE = "autos"
-        elif "paises" in possible_file.lower():
-            CSV_TYPE = "paises"
-        break
+# Si no se definió por ENV, buscar automáticamente
+if CSV_TYPE is None:
+    # Si estamos en /data (servicio 8000), priorizar paises.csv
+    if DATA_DIR == Path("/data"):
+        search_order = ["paises.csv", "autos.csv", "colegios.csv"]
+    else:
+        # Si estamos en /app/data (servicios 8010/8020), priorizar autos/colegios
+        # PERO: si hay ambos, verificar cuál está montado específicamente
+        search_order = ["autos.csv", "colegios.csv", "paises.csv"]
+
+    for possible_file in search_order:
+        candidate = DATA_DIR / possible_file
+        if candidate.exists():
+            CSV_PATH = candidate
+            if "colegios" in possible_file.lower():
+                CSV_TYPE = "colegios"
+            elif "autos" in possible_file.lower():
+                CSV_TYPE = "autos"
+            elif "paises" in possible_file.lower():
+                CSV_TYPE = "paises"
+            break
 
 if CSV_PATH is None:
     # Default según el directorio
